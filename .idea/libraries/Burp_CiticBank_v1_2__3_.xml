@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="Burp_CiticBank_v1.2 (3)">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/src/main/java/burp/Burp_CiticBank_v1.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/src/main/java/burp/Burp_CiticBank_v1.2.jar!/" />
+    </SOURCES>
+  </library>
+</component>
