@@ -33,5 +33,5 @@ public interface IProxyListener
      */
     void processProxyMessage(
             boolean messageIsRequest,
-            IInterceptedProxyMessage message);
+            IInterceptedProxyMessage message) throws Exception;
 }

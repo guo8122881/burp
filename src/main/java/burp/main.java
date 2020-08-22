@@ -1,11 +1,17 @@
 package burp;
 
+import java.io.*;
 import java.net.URL;
 import java.util.List;
 
-public class main implements IExtensionHelpers {
 
-    public static void main(String[] args) {
+import java.util.Scanner;
+
+import javax.script.*;
+
+public class main  {
+
+    public static void main(String[] args) throws FileNotFoundException, ScriptException, NoSuchMethodException {
 
 //        callbacks.printOutput(message.toString());
 //        IHttpRequestResponse qqq=message.getMessageInfo();
@@ -17,145 +23,49 @@ public class main implements IExtensionHelpers {
 //        byte[]aaa=burpHelpers.base64Decode(body);
 //        this.callbacks.printOutput(body);
 //        qqq.setRequest(aaa);
+        // 获取JS执行引擎
+        ScriptEngine se = new ScriptEngineManager().getEngineByName("javascript");
+        // 获取变量
+        Bindings bindings = se.createBindings();
+        bindings.put("number", 3);
+        se.setBindings(bindings, ScriptContext.ENGINE_SCOPE);
+        Scanner sc = new Scanner(System.in);
+        while (sc.hasNextInt()) {
+            int a = sc.nextInt();
+            int b = sc.nextInt();
+            System.out.println("输入的参数【" + a + "】 + 【" + b + "】");
+            se.eval(new FileReader("\\Users\\gc\\Downloads\\666.js"));
+            // 是否可调用
+            if (se instanceof Invocable) {
+                Invocable in = (Invocable) se;
+                Integer result = (Integer) in.invokeFunction("add", a, b);
+                System.out.println("获得的结果：" + result);
+
+            }
+
+        }
+//        public static String hmac(String uuu) throws Exception {
+//            // 得到一个ScriptEngine对象
+//            ScriptEngineManager maneger = new ScriptEngineManager();
+//            ScriptEngine engine = maneger.getEngineByName("JavaScript");
+//
+//            // 读js文件
+//            String jsFile = "/Users/gc/Downloads/666666.js";
+//            FileInputStream fileInputStream = new FileInputStream(new File(jsFile));
+//            Reader scriptReader = new InputStreamReader(fileInputStream, "utf-8");
+//            // 调用JS方法
+//            Invocable invocable = (Invocable)engine;
+//            String result = (String)invocable.invokeFunction("hmacJson", uuu);
+//            System.out.println(result);
+//            System.out.println(result.length());
+//
+//            scriptReader.close();
+//
+//            return result;
+//        }
+
+
     }
 
-    @Override
-    public IRequestInfo analyzeRequest(IHttpRequestResponse request) {
-        return null;
-    }
 
-    @Override
-    public IRequestInfo analyzeRequest(IHttpService httpService, byte[] request) {
-        return null;
-    }
-
-    @Override
-    public IRequestInfo analyzeRequest(byte[] request) {
-        return null;
-    }
-
-    @Override
-    public IResponseInfo analyzeResponse(byte[] response) {
-        return null;
-    }
-
-    @Override
-    public IParameter getRequestParameter(byte[] request, String parameterName) {
-        return null;
-    }
-
-    @Override
-    public String urlDecode(String data) {
-        return null;
-    }
-
-    @Override
-    public String urlEncode(String data) {
-        return null;
-    }
-
-    @Override
-    public byte[] urlDecode(byte[] data) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] urlEncode(byte[] data) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] base64Decode(String data) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] base64Decode(byte[] data) {
-        return new byte[0];
-    }
-
-    @Override
-    public String base64Encode(String data) {
-        return null;
-    }
-
-    @Override
-    public String base64Encode(byte[] data) {
-        return null;
-    }
-
-    @Override
-    public byte[] stringToBytes(String data) {
-        return new byte[0];
-    }
-
-    @Override
-    public String bytesToString(byte[] data) {
-        return null;
-    }
-
-    @Override
-    public int indexOf(byte[] data, byte[] pattern, boolean caseSensitive, int from, int to) {
-        return 0;
-    }
-
-    @Override
-    public byte[] buildHttpMessage(List<String> headers, byte[] body) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] buildHttpRequest(URL url) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] addParameter(byte[] request, IParameter parameter) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] removeParameter(byte[] request, IParameter parameter) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] updateParameter(byte[] request, IParameter parameter) {
-        return new byte[0];
-    }
-
-    @Override
-    public byte[] toggleRequestMethod(byte[] request) {
-        return new byte[0];
-    }
-
-    @Override
-    public IHttpService buildHttpService(String host, int port, String protocol) {
-        return null;
-    }
-
-    @Override
-    public IHttpService buildHttpService(String host, int port, boolean useHttps) {
-        return null;
-    }
-
-    @Override
-    public IParameter buildParameter(String name, String value, byte type) {
-        return null;
-    }
-
-    @Override
-    public IScannerInsertionPoint makeScannerInsertionPoint(String insertionPointName, byte[] baseRequest, int from, int to) {
-        return null;
-    }
-
-    @Override
-    public IResponseVariations analyzeResponseVariations(byte[]... responses) {
-        return null;
-    }
-
-    @Override
-    public IResponseKeywords analyzeResponseKeywords(List<String> keywords, byte[]... responses) {
-        return null;
-    }
 }
