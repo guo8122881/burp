@@ -224,7 +224,7 @@ public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListene
             }
 
         }else {
-            this.callbacks.printError("未加密成功");
+            this.callbacks.printError("非联盟请求，忽略加密");
         }
     }
 
