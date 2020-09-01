@@ -1,10 +1,13 @@
 package burp;
 
+import com.sun.xml.internal.messaging.saaj.util.Base64;
+
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,8 +15,11 @@ import javax.script.Invocable;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 import javax.swing.*;
-
-
+//new_requests=new_aaa.getBytes("UTF-8");//这儿必须要用getBytes（"UTF-8"）方法，不然会编码错误
+//警告这儿如果将请求专成字符串，必须要用这个方法，不可用burphelpers的BytetoString方法
+//如果字符串转byte也需要用String req=new String(new_requests,"UTF-8");
+//总之字节转字符串，字符串转字节不可用burp自带的方法，需要用上面的转换方法才可以
+//并且不要使用burp自带的encode和decode方法，没有做转码处理，会报错，使用java自带的URLencode.encode方法
 public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListener ,ITab {
     private IExtensionHelpers burpHelpers = null;
     private PrintWriter debugLogger = null;
@@ -25,7 +31,9 @@ public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListene
     private IMessageEditorTabFactory factory;
     private IContextMenuFactory iContextMenuFactory;
     private IContextMenuInvocation currentInvocation;
-
+    //关键点：：：
+    //这儿是关键，因为burp插件会有编码问题，如果只用burphelpers的urldecode只进行了url解码，但是没处理utf-8,bgk
+    //等编码问题，所以，还需要用java原生态的decode再解码一次，解码根据网页的编码来进行解码
 
     public void registerExtenderCallbacks(IBurpExtenderCallbacks callbacks) {
         this.callbacks = callbacks;
@@ -42,31 +50,7 @@ public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListene
 
 
     }
-    public List<JMenuItem> CreatMenu(IContextMenuInvocation invocation) {
-        if (invocation.getInvocationContext() == IContextMenuInvocation.CONTEXT_MESSAGE_EDITOR_REQUEST ||
-                invocation.getInvocationContext() == IContextMenuInvocation.CONTEXT_MESSAGE_EDITOR_RESPONSE) {
-//            this.currentInvocation = invocation;
-//            List<JMenuItem> listMenuItems = new ArrayList<JMenuItem>();
-//            JMenuItem jMenuItem = new JMenuItem("Send TO Cryptor");
-//            jMenuItem.setActionCommand("HDSetting");
-//            jMenuItem.addActionListener((ActionListener) this);
-//            listMenuItems.add(jMenuItem);
-//            return listMenuItems;
 
-            List<JMenuItem> listMenuItems = new ArrayList<JMenuItem>();
-            //子菜单
-            JMenuItem menuItem;
-            menuItem = new JMenuItem("子菜单测试");
-
-            //父级菜单
-            JMenu jMenu = new JMenu("Cryptor");
-            jMenu.add(menuItem);
-            listMenuItems.add(jMenu);
-            return listMenuItems;
-        }else {
-            return null;
-        }
-    }
     public void processHttpMessage(
             int toolFlag, boolean messageIsRequest, IHttpRequestResponse messageInfo) throws Exception {
         if (messageIsRequest) {
@@ -87,51 +71,81 @@ public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListene
         if(messageIsRequest){
             IHttpRequestResponse qqq=message.getMessageInfo();//获取报文信息
             byte[] new_requests = qqq.getRequest();//从豹纹对象中获取请求包
-
-            String req=burpHelpers.bytesToString(new_requests);//将请求转换从字节数组转换成
+            String req=new String(new_requests,"UTF-8");//将请求转换从字节数组转换成
             if(req.contains("jsonData=")){
                 if(req.contains("&requestChannel=WX")){
                     callbacks.printOutput("微信银行请求获取成功");
                     IRequestInfo analyzeRequest=burpHelpers.analyzeRequest(message.getMessageInfo());//获取请求报文信息
-                    int a=analyzeRequest.getBodyOffset();//获取请求体内容
-                    String body=burpHelpers.bytesToString(new_requests).substring(a).trim();//利用substring截取豹纹体
-                    String ccc=body.substring(9);//利用substring截取要解密的字段
-                    String cccc=URLDecoder.decode(ccc,"UTF-8");//对解密的字段进行url转码,这儿必须要用系统自带的url转换
-                    //不能使用burphelps里的urldecode方法
-                    new_requests=burpHelpers.stringToBytes(cccc);//对解密的字段进行base64转码
-                    String aaaa=burpHelpers.bytesToString(new_requests);//从字节转换成字符串
-                    String yyyy=aaaa.substring(aaaa.indexOf("\"reqHead\""),aaaa.indexOf("&requestChannel=WX"));
-                    callbacks.printOutput("微信银行未拼接的报文"+yyyy);
-                    String yyyyy=hmac("{"+yyyy);
-                    String oldmac=yyyyy.substring(yyyyy.indexOf(",\"mac\":")+1,yyyyy.indexOf("=\"}")+2);
-                    String newmac=(oldmac+",");
-                    String xxx=("{"+newmac+yyyy);
-                    String aa = "jsonData=";
-                    String aaa = "&requestChannel=WX";
-                    String new_aaa = aa+xxx+aaa;
-                    new_requests=burpHelpers.stringToBytes(new_aaa);//因为请求必须是字节发送，所以要将字符串转换成字节
-                    new_requests=burpHelpers.buildHttpMessage(analyzeRequest.getHeaders(), new_requests);//通过bulidhttpmessage构造请求，请求头，请求体
-                    qqq.setRequest(new_requests);//将请求转发出去
-                    callbacks.printOutput("微信银行拼接后的报文"+new_aaa);
+                    List<String> yas=analyzeRequest.getHeaders();
+                    String headerpar=yas.get(0);
+                    callbacks.printOutput(req);
+                    String rreq=URLDecoder.decode(req,"UTF-8");
+                    callbacks.printOutput("微信请求：：："+rreq);
+                    //微信请求头解密
+                    if(headerpar.contains("&requestChannel=WX")) {
+                        callbacks.printOutput("请求头微信银行解密成功");
+                        String newheader=headerpar.substring(headerpar.indexOf("jsonData=")+9,headerpar.indexOf("&requestChannel=WX")+18);
+                        String newheader1=burpHelpers.urlDecode(newheader);
+                        String newheader2=URLDecoder.decode(newheader1,"UTF-8");
+                        String yyyy=newheader2.substring(newheader2.indexOf("\"reqHead\""),newheader2.indexOf("&requestChannel=WX")-1);
+                        String yyyyy=hmac("{"+yyyy+"}");
+                        String oldmac=yyyyy.substring(yyyyy.indexOf(",\"mac\":")+1,yyyyy.indexOf("=\"}")+2);
+                        String newmac=(oldmac+",");
+                        String xxx=("{"+newmac+yyyy+"}");
+                        String post=headerpar.substring(headerpar.indexOf("/wbank/")-5,headerpar.indexOf("jsonData=")+9);
+                        String PPost=post+xxx+"&requestChannel=WX HTTP/1.1";
+                        callbacks.printError("微信银行请求头豹纹：：：："+PPost);
+                        yas.set(0,PPost);
+                        new_requests=burpHelpers.buildHttpMessage(yas,null);
+                        qqq.setRequest(new_requests);
+
+                    }else {
+                        //微信请求体解密
+                        int a=analyzeRequest.getBodyOffset();//获取请求体内容
+                        String body=req.substring(a).trim();//利用substring截取豹纹体
+                        String ccc=body.substring(9);//利用substring截取要解密的字段
+                        //关键点：：：
+                        //这儿是关键，因为burp插件会有编码问题，如果只用burphelpers的urldecode只进行了url解码，但是没处理utf-8,bgk
+                        //等编码问题，所以，还需要用java原生态的decode再解码一次，解码根据网页的编码来进行解码
+                        String cccc=URLDecoder.decode(ccc,"UTF-8");//对解密的字段进行url转码,这儿必须要用系统自带的url转换
+                        //不能使用burphelps里的urldecode方法
+                        String yyyy=cccc.substring(cccc.indexOf("\"reqHead\""),cccc.indexOf("&requestChannel=WX"));
+                        String yyyyy=hmac("{"+yyyy);
+                        String oldmac=yyyyy.substring(yyyyy.indexOf(",\"mac\":")+1,yyyyy.indexOf("=\"}")+2);
+                        String newmac=(oldmac+",");
+                        String xxx=("{"+newmac+yyyy);
+                        String aa = "jsonData=";
+                        String aaa = "&requestChannel=WX";
+                        String new_aaa = aa+xxx+aaa;
+                        new_requests=new_aaa.getBytes("UTF-8");//因为请求必须是字节发送，所以要将字符串转换成字节
+                        new_requests=burpHelpers.buildHttpMessage(analyzeRequest.getHeaders(), new_requests);//通过bulidhttpmessage构造请求，请求头，请求体
+                        qqq.setRequest(new_requests);//将请求转发出去
+
+                    }
                 }else {
+                    //个人银行解密
                     IRequestInfo analyzeRequest=burpHelpers.analyzeRequest(message.getMessageInfo());//获取请求报文信息
                     int a=analyzeRequest.getBodyOffset();//获取请求体内容
-                    String body=burpHelpers.bytesToString(new_requests).substring(a).trim();//利用substring截取豹纹体
+                    String body=req.substring(a).trim();//利用substring截取豹纹体
                     String ccc=body.substring(17);//利用substring截取要解密的字段
-                    String cccc=URLDecoder.decode(ccc,"UTF-8");//对解密的字段进行url转码,这儿必须要用系统自带的url转换
+                    //关键点：：：
+                    //这儿是关键，因为burp插件会有编码问题，如果只用burphelpers的urldecode只进行了url解码，但是没处理utf-8,bgk
+                    //等编码问题，所以，还需要用java原生态的decode再解码一次，解码根据网页的编码来进行解码
+
+                    String cccc=URLDecoder.decode(ccc,"UTF-8");
+
                     //不能使用burphelps里的urldecode方法
 
-                    new_requests=burpHelpers.stringToBytes(cccc);//对解密的字段进行base64转码
-                    String aaaa=burpHelpers.bytesToString(new_requests);//从字节转换成字符串
-                    String yyyy=aaaa.substring(aaaa.indexOf("jsonData=")+1,aaaa.indexOf(",\"mac"));
+                    String yyyy=cccc.substring(cccc.indexOf("jsonData=")+1,cccc.indexOf(",\"mac"));
                     String yyyyy=hmac(yyyy+"}");
+//                    String y=burpHelpers.urlDecode(yyyyy);
+//                    callbacks.printOutput("y的植为：：："+y);
                     String aa = "rqId=A1&";
                     String aaa = "jsonData=";//拼接字段
                     String new_aaa = aa+aaa+yyyyy;
-                    new_requests=burpHelpers.stringToBytes(new_aaa);//因为请求必须是字节发送，所以要将字符串转换成字节
+                    new_requests=new_aaa.getBytes("UTF-8");//这儿必须要用getBytes（"UTF-8"）方法，不然会编码错误
+//                    new_requests=burpHelpers.stringToBytes(new_aaa);//因为请求必须是字节发送，所以要将字符串转换成字节
                     new_requests=burpHelpers.buildHttpMessage(analyzeRequest.getHeaders(), new_requests);//通过bulidhttpmessage构造请求，请求头，请求体
-                    this.callbacks.printOutput(yyyy);//调用callbacks的日志输出
-                    this.callbacks.printOutput(yyyyy);
                     qqq.setRequest(new_requests);//将请求转发出去
                 }
 
@@ -150,8 +164,9 @@ public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListene
 //        String path = this.getClass().getClassLoader().getResource("666666.js").getPath();
 //        String path2=path.substring(5);
         // 读js文件/Users/gc/IdeaProjects/Myburp/src/main/java/burp/666666.js
+
 //        String path1=this.getClass().getPackage().getName();
-        String jsFile = ("\\e:\\mac\\666666.js");
+        String jsFile = ("/Users/gc/IdeaProjects/Myburp/src/main/java/burp/666666.js");
         FileInputStream fileInputStream = new FileInputStream(new File(jsFile));
         Reader scriptReader = new InputStreamReader(fileInputStream, "utf-8");
         // 调用JS方法
@@ -169,63 +184,83 @@ public class BurpExtender implements IBurpExtender, IHttpListener, IProxyListene
 
 
     private void requestOut(IHttpRequestResponse messageInfo) throws Exception {
-        callbacks.printError("666666666666666");
         byte[] new_requests = messageInfo.getRequest();//从豹纹对象中获取请求包
-        String req=burpHelpers.bytesToString(new_requests);//将请求转换从字节数组转换成
+        String req=new String(new_requests,"UTF-8");
+//        String req=burpHelpers.bytesToString(new_requests);//将请求转换从字节数组转换成
+        callbacks.printError("response的只为：：：++"+req);
+        //是否是联盟请求
         if(req.contains("jsonData=")){
+            //是否是微信请求
             if(req.contains("&requestChannel=WX")){
                 callbacks.printOutput("微信银行请求获取成功");
                 IRequestInfo analyzeRequest=burpHelpers.analyzeRequest(messageInfo);//获取请求报文信息
-                int a=analyzeRequest.getBodyOffset();//获取请求体内容
-                String body=burpHelpers.bytesToString(new_requests).substring(a).trim();
-                String cccc=body.substring(9);//利用substring截取要解密的字段
+                List<String> yas=analyzeRequest.getHeaders();
+                String headerpar=yas.get(0);
+                callbacks.printOutput(req);
+                String rreq=URLDecoder.decode(req,"UTF-8");
+                callbacks.printOutput("微信请求：：："+rreq);
+                //是否是微信银行请求头解密
+                if(headerpar.contains("&requestChannel=WX")){
+                    callbacks.printOutput("请求头微信银行解密成功");
+                    String newheader=headerpar.substring(headerpar.indexOf("jsonData=")+9,headerpar.indexOf("&requestChannel=WX")+18);
+                    String yyyy=newheader.substring(newheader.indexOf("\"reqHead\""),newheader.indexOf("&requestChannel=WX")-1);
+                    String yyyyy=hmac("{"+yyyy+"}");
+                    String oldmac=yyyyy.substring(yyyyy.indexOf(",\"mac\":")+1,yyyyy.indexOf("=\"}")+2);
+                    String newmac=(oldmac+",");
+                    String xxx=("{"+newmac+yyyy+"}");
+                    String xxxx=URLEncoder.encode(xxx,"UTF-8");
+                    String post=headerpar.substring(headerpar.indexOf("/wbank/")-5,headerpar.indexOf("jsonData=")+9);
+                    String PPost=post+xxxx+"&requestChannel=WX HTTP/1.1";
+                    callbacks.printError("微信银行请求头豹纹：：：："+PPost);
+                    yas.set(0,PPost);
+                    new_requests=burpHelpers.buildHttpMessage(yas,null);
+                    messageInfo.setRequest(new_requests);
+                }else{
+                    //是否是微信银行请求体解密
+                    int a=analyzeRequest.getBodyOffset();//获取请求体内容
+                    String body=req.substring(a).trim();
+                    String cccc=body.substring(9);//利用substring截取要解密的字段
 //                String cccc=URLDecoder.decode(ccc,"UTF-8");//对解密的字段进行url转码,这儿必须要用系统自带的url转换
-                //不能使用burphelps里的urldecode方法
-                new_requests=burpHelpers.stringToBytes(cccc);//对解密的字段进行base64转码
-                String aaaa=burpHelpers.bytesToString(new_requests);//从字节转换成字符串
-                callbacks.printOutput("之前"+aaaa);
-                String yyyy=aaaa.substring(aaaa.indexOf("\"reqHead\""),aaaa.indexOf("&requestChannel=WX")-1);
-                callbacks.printOutput("之后"+yyyy);
-                String yyyyy=hmac("{"+yyyy+"}");
-                callbacks.printOutput("加大括号的："+yyyy);
-                String oldmac=yyyyy.substring(yyyyy.indexOf(",\"mac\":")+1,yyyyy.indexOf("=\"}")+2);
-                String newmac=(oldmac+",");
-                String xxx=("{"+newmac+yyyy);
-                String aa = "jsonData=";
-                String aaa = "&requestChannel=WX";
-                String xxxx=URLEncoder.encode(xxx,"UTF-8");
-                String new_aaa = aa+xxxx+"}"+aaa;
-                callbacks.printOutput(new_aaa);
-                new_requests=burpHelpers.stringToBytes(new_aaa);//因为请求必须是字节发送，所以要将字符串转换成字节
-                new_requests=burpHelpers.buildHttpMessage(analyzeRequest.getHeaders(), new_requests);//通过bulidhttpmessage构造请求，请求头，请求体
-                messageInfo.setRequest(new_requests);//将请求转发出去
+                    //不能使用burphelps里的urldecode方法
+                    String yyyy=cccc.substring(cccc.indexOf("\"reqHead\""),cccc.indexOf("&requestChannel=WX")-1);
+                    String yyyyy=hmac("{"+yyyy+"}");
+                    String oldmac=yyyyy.substring(yyyyy.indexOf(",\"mac\":")+1,yyyyy.indexOf("=\"}")+2);
+                    String newmac=(oldmac+",");
+                    String xxx=("{"+newmac+yyyy);
+                    String aa = "jsonData=";
+                    String aaa = "&requestChannel=WX";
+                    String xxxx=URLEncoder.encode(xxx,"UTF-8");
+                    String new_aaa = aa+xxxx+"}"+aaa;
+                    new_requests=new_aaa.getBytes("UTF-8");//因为请求必须是字节发送，所以要将字符串转换成字节
+                    new_requests=burpHelpers.buildHttpMessage(analyzeRequest.getHeaders(), new_requests);//通过bulidhttpmessage构造请求，请求头，请求体
+                    messageInfo.setRequest(new_requests);//将请求转发出去
+                }
             }else{
+                //个人银行请求
                 IRequestInfo analyzeRequest=burpHelpers.analyzeRequest(messageInfo);//获取请求报文信息
                 int a=analyzeRequest.getBodyOffset();//获取请求体内容
-                String body=burpHelpers.bytesToString(new_requests).substring(a).trim();//利用substring截取豹纹体
+                String body=req.substring(a).trim();//利用substring截取豹纹体
                 String ccc=body.substring(17);//利用substring截取要解密的字段
                 String yyyy=body.substring(body.indexOf("jsonData=")+9,body.indexOf(",\"mac"));
                 String yyyyy=hmac(yyyy+"}");
-
                 String yyyyyy = (yyyyy);
                 String cccc=URLEncoder.encode(yyyyyy,"UTF-8");//对解密的字段进行url转码,这儿不能使用burphelpers自带的urlEncode方法，
                 //加密报文会编码失败
-//          String cccc=burpHelpers.urlEncode(yyyyyy);//对解密的字段进行url转码
-                new_requests=burpHelpers.stringToBytes(cccc);//对解密的字段进行base64转码
-                String aaaa=burpHelpers.bytesToString(new_requests);//从字节转换成字符串
                 String aa = "rqId=A1&";
                 String aaa = "jsonData=";//拼接字段
-                String new_aaa = aa+aaa+aaaa;
-                callbacks.printError(new_aaa);
-                new_requests=burpHelpers.stringToBytes(new_aaa);//因为请求必须是字节发送，所以要将字符串转换成字节
+                String new_aaa = aa+aaa+cccc;
+                new_requests=new_aaa.getBytes("UTF-8");//因为请求必须是字节发送，所以要将字符串转换成字节
                 new_requests=burpHelpers.buildHttpMessage(analyzeRequest.getHeaders(), new_requests);//通过bulidhttpmessage构造请求，请求头，请求体
-                this.callbacks.printOutput(cccc);//调用callbacks的日志输出
                 messageInfo.setRequest(new_requests);//将请求转发出去
             }
 
         }else {
             this.callbacks.printError("非联盟请求，忽略加密");
         }
+    }
+    public  String ByteString(byte[] bytes) throws UnsupportedEncodingException {
+        String sendString=new String(bytes ,"UTF-8");
+        return sendString;
     }
 
     private void responseIn(IHttpRequestResponse messageInfo) {
